@@ -27,7 +27,7 @@ async function api(path, opts = {}) {
   if (!r.ok || (j && j.ok === false)) throw new Error((j && j.error) || `Lỗi ${r.status}`);
   return j;
 }
-const C = { state: null, draws: {}, asc: {}, keys: {}, lab: {}, purchases: null, rho: {}, syncLog: null };
+const C = { state: null, draws: {}, asc: {}, keys: {}, lab: {}, purchases: null, syncLog: null };
 const getState = async () => (C.state ??= await api("/state"));
 const getDraws = async (g) => {
   if (!C.draws[g]) { C.draws[g] = await api(`/draws?game=${g}`); C.asc[g] = [...C.draws[g]].reverse(); }
@@ -36,24 +36,8 @@ const getDraws = async (g) => {
 const getPurchases = async () => (C.purchases ??= await api("/purchases"));
 const getLab = async (g) => (C.lab[g] ??= await api(`/lab?game=${g}`));
 const drawnKeys = (g) => (C.keys[g] ??= new Set(C.draws[g].map((d) => d.main.join("-"))));
-const dropData = () => { C.state = C.purchases = null; C.draws = {}; C.asc = {}; C.keys = {}; C.lab = {}; C.rho = {}; };
+const dropData = () => { C.state = C.purchases = null; C.draws = {}; C.asc = {}; C.keys = {}; C.lab = {}; };
 
-// Deterministic generator so the "formula's picks" figure on the board does not jitter between loads.
-function seeded(a) {
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-function rhoPick(g) {
-  if (C.rho[g] == null) {
-    const t = buildTickets({ k: 5, alpha: C.state.games[g].alpha, rng: seeded(7) });
-    C.rho[g] = t ? mean(t.map((x) => popularity(x, C.state.games[g].alpha))) : 0.7;
-  }
-  return C.rho[g];
-}
 const evInputs = (nx) => ({ jp1: nx.jp1, jp2: nx.jp2 ?? 0, sales: nx.sales });
 const haveNext = (nx) => nx && nx.jp1 != null && nx.sales != null;
 
@@ -120,7 +104,8 @@ function analysisHtml(g, tickets, alpha, inp) {
 const idk = (id) => "#" + String(id).padStart(5, "0");
 const chip = (bought, id) => `<span class="chip ${bought ? "ok" : "due"}">${bought ? "Đã mua" : "Chưa mua"} kỳ ${idk(id)}</span>`;
 
-// The user's own formula leads the board: its tickets, odds, EV, SMS line and the "I sent it" button.
+// The user's own formula leads the board, answering "which numbers?" in one screen.
+const balls = (T, sm = "") => `<div class="prows${sm}">${T.map((t, i) => `<div class="marks r${i % 5}">${t.map((x) => mk(x, "ball")).join("")}</div>`).join("")}</div>`;
 function planTile(st) {
   const pl = st.plan, g = pl.game, game = GAMES[g], d = st.games[g], nx = d.next, T = pl.tickets;
   const o = oddsFigures(g, T);
@@ -130,47 +115,55 @@ function planTile(st) {
   const buy = pl.next_bought
     ? `<p>Đã ghi vào sổ cho kỳ ${idk(pl.next_draw)}. Đừng gửi SMS lần nữa. <a href="#/so-ve">Mở sổ vé</a></p>`
     : `<code class="sms">${esc(pl.sms.join("\n"))}</code>
-       <button type="button" class="btn soft" data-act="copy" data-copy="${esc(pl.sms.join("\n"))}" data-k="copy">Sao chép tin nhắn</button>
+       <button type="button" class="btn red" data-act="copy" data-copy="${esc(pl.sms.join("\n"))}" data-k="copy">Sao chép tin nhắn, gửi 9969</button>
        <label class="field" for="plan-code">Mã vé (không bắt buộc)</label><input id="plan-code" data-in="plancode" autocomplete="off" value="${esc(P.planCode)}">
-       <button type="button" class="btn red" data-act="planBuy" data-k="planBuy">Đã gửi SMS, ghi vào sổ</button>
+       <button type="button" class="btn" data-act="planBuy" data-k="planBuy">Đã gửi SMS, ghi vào sổ</button>
        <p class="cap" role="status" id="plan-msg"></p>`;
-  return tile("s8 ink", `<div class="plan">
+  return tile("s12 sun", `<div class="plan">
     <div class="pl-a">
-      <h1>${esc(pl.name)}</h1>
-      <p class="stat">${chip(pl.next_bought, pl.next_draw)}<span>${date}</span></p>
-      <div class="prows">${T.map((t, i) => `<div class="prow"><span class="cap">${LETTERS[i]}</span><div class="marks">${t.map((x) => mk(x)).join("")}</div></div>`).join("")}</div>
-      <p class="cap">${esc(pl.note)}</p>
+      <h1>Số cho kỳ ${idk(pl.next_draw)}</h1>
+      <p class="stat">${chip(pl.next_bought, pl.next_draw)}<span>${date}${nx && nx.jp1 ? `, Jackpot ${ty(nx.jp1)}` : ""}</span></p>
+      ${balls(T)}
+      <p class="lead">Không số nào dễ ra hơn số nào: mỗi bộ 6 số đều là 1 trên ${nf(game.total)}. Với ${dong(pl.cost_per_draw)}, 5 vé không chung số này là cách có cơ hội trúng cao nhất.</p>
     </div>
     <div class="pl-b">
       <div class="pair">
-        <div><p class="fig">${pct(o.any)}</p><p>Có ít nhất một giải mỗi kỳ: <span class="cap">${nf(o.c.any)} / ${nf(o.c.total)}</span></p></div>
-        <div><p class="fig">${pct(o.ge4)}</p><p>Có giải Nhì trở lên (từ 4 số): <span class="cap">${nf(o.c.ge4)} / ${nf(o.c.total)}</span></p></div>
+        <div><p class="fig">${pct(o.any)}</p><p>mỗi kỳ có ít nhất một giải</p></div>
+        <div><p class="fig">${pct(o.ge4)}</p><p>có giải Nhì trở lên</p></div>
       </div>
-      <p>${ev != null ? `Kỳ vọng mỗi vé <b>${dong(ev)}</b> trên ${dong(PRICE)} (cả bộ ${dong(ev * T.length)} trên ${dong(pl.cost_per_draw)}), ρ trung bình ${nf(rho, 2)}.` : "Chưa có ước tính jackpot cho kỳ tới."}</p>
+      <p>${ev != null ? `Mỗi vé trung bình nhận lại <b>${dong(ev)}</b> trên ${dong(PRICE)}.` : ""} ${esc(pl.name)}: ${esc(pl.note)}</p>
       ${buy}
     </div></div>`);
 }
 
+// Your formula next to Mark Do's original (markdo27) and the two merged.
+function markdoTile(st) {
+  const g = st.plan ? st.plan.game : "655", d = st.games[g], md = d.markdo, n = GAMES[g].n;
+  if (!md) return "";
+  const sets = [
+    st.plan && { cls: "mine", name: "Công thức của tôi", how: "5 vé rời, số ít người chọn", T: st.plan.tickets, sc: md.plan_scores, rho: md.plan_rho },
+    { cls: "md", name: "Mark Do", how: `3 số nóng nhất (${md.hot.slice(0, 3).join(", ")}) + 3 số gan nhất (${md.overdue.slice(0, 3).join(", ")})`, T: [md.combo], sc: [md.combo_score], rho: md.combo_rho },
+    { cls: "mix", name: "Gộp hai công thức", how: "5 vé rời, số chọn theo điểm Mark Do", T: md.merged, sc: md.merged_scores, rho: md.merged_rho },
+  ].filter(Boolean);
+  const col = (s) => {
+    const c = coverage(s.T, n);
+    return `<div class="cmp ${s.cls}"><h3>${s.name}</h3><p class="cap">${esc(s.how)}</p>${balls(s.T, " sm")}
+      <dl class="kv"><dt>Có giải mỗi kỳ</dt><dd>${pct(c.any / c.total)}</dd><dt>Chi mỗi kỳ</dt><dd>${dong(s.T.length * PRICE)}</dd>
+      <dt>Điểm Mark Do</dt><dd>${Math.round(mean(s.sc))}/100</dd><dt>Người chia Jackpot</dt><dd>×${nf(s.rho, 2)}</dd></dl></div>`;
+  };
+  const bt = md.backtest;
+  return tile("s12", `<h2>Gộp với công thức Mark Do</h2>
+    <div class="cmps">${sets.map(col).join("")}</div>
+    <p>Điểm Mark Do không làm số dễ ra hơn: thử lại trên ${nf(bt.draws)} kỳ, cách chọn của Mark Do trùng trung bình ${nf(bt.mean_matches, 3)} số mỗi kỳ, chọn bừa là ${nf(bt.expected, 3)} (p = ${nf(bt.p, 2)}, như ngẫu nhiên). Bộ gộp có cùng cơ hội với bộ của bạn vì cũng là 5 vé rời; khác ở chỗ nhiều người chọn số nóng hơn, nên nếu trúng Jackpot phải chia cho nhiều người hơn. <b>Giữ bộ của bạn.</b> <a href="#/phong-thu">Xem phòng thử</a></p>`);
+}
+
 async function viewBang(root) {
   const st = await getState();
-  const rows = GIDS.map((g) => {
-    const game = GAMES[g], d = st.games[g], nx = d.next;
-    let ev = null;
-    if (haveNext(nx)) {
-      const inp = evInputs(nx), rp = rhoPick(g);
-      ev = { avg: expectedValue(game, { ...inp, rho: 1 }), pick: expectedValue(game, { ...inp, rho: rp }), rp, beAvg: breakEvenJackpot(game, { jp2: inp.jp2, sales: inp.sales, rho: 1 }), bePick: breakEvenJackpot(game, { jp2: inp.jp2, sales: inp.sales, rho: rp }) };
-    }
-    return { g, game, d, nx, ev };
-  });
-  const h = rows[0], pl = st.plan;
-  const statement = h.ev
-    ? `Một vé Power 6/55 chia theo công thức đáng ${dong(h.ev.pick)} ở kỳ #${h.nx.id}; vé chọn ngẫu nhiên trung bình đáng ${dong(h.ev.avg)}. Jackpot 1 phải vượt ${h.ev.bePick ? ty(h.ev.bePick) : "mọi mức"} mới hoà vốn; hiện là ${ty(h.nx.jp1)}.`
-    : "Bấm “Cập nhật ngay” để lấy jackpot và số vé bán ra.";
-  const first = pl
-    ? planTile(st)
-    : tile("s6 ink hero", `<h1>${h.ev ? `Vé 10.000đ lúc này đáng ${dong(h.ev.pick)}` : "Chưa có ước tính cho kỳ tới"}</h1><p>${statement}</p>`);
-  const jp = rows.map(({ game, nx }) => tile(pl ? "" : "s3", nx
-    ? `<p class="fig">${nx.jp1 != null ? ty(nx.jp1) : "chưa rõ"}</p><p>Jackpot ${game.id === "655" ? "1 " : ""}${game.name}, kỳ #${nx.id}, ${wd(nx.date)} ${dm(nx.date)}</p>${nx.jp2 != null ? `<p class="cap">Jackpot 2: ${ty(nx.jp2)}</p>` : ""}`
+  const rows = GIDS.map((g) => ({ g, game: GAMES[g], d: st.games[g], nx: st.games[g].next }));
+  const pl = st.plan;
+  const first = pl ? planTile(st) : tile("s12 sun", `<h1>Chưa có công thức</h1><p>Thêm data/plan.json rồi tải lại.</p>`);
+  const jp = rows.map(({ g, game, nx }) => tile(`s3 j${g}`, nx
+    ? `<p class="fig">${nx.jp1 != null ? ty(nx.jp1) : "chưa rõ"}</p><p>Jackpot ${game.id === "655" ? "1 " : ""}${game.name}, kỳ #${nx.id}, ${wd(nx.date)} ${dm(nx.date)}</p>${nx.jp2 != null ? `<p>Jackpot 2: ${ty(nx.jp2)}</p>` : ""}`
     : `<p class="fig">chưa rõ</p><p>${game.name}: chưa có kỳ tới</p>`)).join("");
   const results = rows.map(({ g, game, d }) => {
     const l = d.last;
@@ -181,23 +174,16 @@ async function viewBang(root) {
     const win = p
       ? `<table class="t"><thead><tr><th>Giải</th><th>Giá trị</th><th>Số vé trúng</th></tr></thead><tbody>${game.prizes.filter((x) => cnt(x.key) != null).map((x) => `<tr><td>${x.name}</td><td>${val(x.key) != null ? dong(val(x.key)) : "–"}</td><td>${nf(cnt(x.key))}</td></tr>`).join("")}</tbody></table>`
       : `<p class="cap">Chưa có số vé trúng cho kỳ này.</p>`;
-    return tile("s6", `<h2>${game.name}: kỳ #${l.id}, ${wd(l.date)} ${dmy(l.date)}</h2>
-      <div class="drawn"><div class="marks">${l.main.map((x) => mk(x, "hit")).join("")}</div>${l.bonus != null ? `<div class="bonus">${mk(l.bonus)}<span class="cap">số đặc biệt</span></div>` : ""}</div>${win}`);
+    return tile("s6", `<h2>Kết quả ${game.name}: kỳ #${l.id}, ${wd(l.date)} ${dmy(l.date)}</h2>
+      <div class="drawn"><div class="marks">${l.main.map((x) => mk(x, "ball hit")).join("")}</div>${l.bonus != null ? `<div class="bonus">${mk(l.bonus, "ball")}<span class="cap">số đặc biệt</span></div>` : ""}</div>${win}`);
   }).join("");
-  const evRows = rows.map(({ game, ev }) => `<tr><td data-l="Trò chơi">${game.name}</td>${ev
-    ? `<td data-l="Vé trung bình">${dong(ev.avg)}</td><td data-l="Vé chia theo công thức">${dong(ev.pick)} <span class="cap">ρ ${nf(ev.rp, 2)}</span></td><td data-l="Hoà vốn khi Jackpot 1 đạt">${ev.bePick ? ty(ev.bePick) : "không bao giờ"} <span class="cap">(vé trung bình ${ev.beAvg ? ty(ev.beAvg) : "không bao giờ"})</span></td>`
-    : `<td data-l="Ước tính" colspan="3">chưa có ước tính kỳ tới</td>`}</tr>`).join("");
   const L = st.ledger, netv = L.won - L.spent;
   root.innerHTML = [
-    first, pl ? `<div class="col s4">${jp}</div>` : jp,
+    first, markdoTile(st), jp,
+    tile("s3", `<h2>Sổ vé</h2><dl class="kv"><dt>Đã chi</dt><dd>${dong(L.spent)}</dd><dt>Đã trúng</dt><dd>${dong(L.won)}</dd><dt>Chênh lệch</dt><dd>${signed(netv)}</dd></dl><p class="cap">${L.tickets} vé trong ${L.purchases} lần mua. <a href="#/so-ve">Mở sổ vé</a></p>`),
+    tile("s3", `<h2>Dữ liệu</h2><p>Cập nhật lần cuối ${st.synced_at ? when(st.synced_at) : "chưa lần nào"}.</p><button class="btn" data-act="sync" data-k="sync">Cập nhật ngay</button><div class="log" aria-live="polite">${syncLogHtml()}</div>`),
     results,
-    tile("s8", `<h2>Giá trị kỳ vọng của một vé ${dong(PRICE)}</h2>
-      <div class="tablewrap"><table class="t stack"><thead><tr><th>Trò chơi</th><th>Vé trung bình</th><th>Vé chia theo công thức</th><th>Hoà vốn khi Jackpot 1 đạt</th></tr></thead><tbody>${evRows}</tbody></table></div>
-      <p>${statement}</p>
-      <p>Mọi con số dưới ${dong(PRICE)} nghĩa là chơi lâu dài thì lỗ. Đã trừ thuế và chia jackpot cho người trúng cùng; ρ là mức phổ biến của bộ số so với vé trung bình.</p>`),
     `<figure class="tile photo" style="--i:${ix++}"><img src="assets/ve-so-buoi-som.jpg" width="1024" height="682" alt="Người bán vé số ven đường ngồi bên bàn nhỏ, ảnh đen trắng"></figure>`,
-    tile("s4", `<h2>Sổ vé</h2><dl class="kv"><dt>Đã chi</dt><dd>${dong(L.spent)}</dd><dt>Đã trúng</dt><dd>${dong(L.won)}</dd><dt>Chênh lệch</dt><dd>${signed(netv)}</dd></dl><p class="cap">${L.tickets} vé trong ${L.purchases} lần mua. <a href="#/so-ve">Mở sổ vé</a></p>`),
-    tile("s4", `<h2>Dữ liệu</h2><p>Cập nhật lần cuối ${st.synced_at ? when(st.synced_at) : "chưa lần nào"}.</p><button class="btn" data-act="sync" data-k="sync">Cập nhật ngay</button><div class="log" aria-live="polite">${syncLogHtml()}</div>`),
   ].join("");
 }
 function syncLogHtml() {

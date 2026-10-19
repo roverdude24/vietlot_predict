@@ -47,3 +47,26 @@ def prize_value(game, key, prizes):
         return 0
     value, winners = (prizes["jp1"], prizes["n_jp1"]) if key == "jp1" else (prizes["jp2"], prizes["n_jp2"])
     return net((value or 0) / max(1, winners or 1))
+
+
+def popularity(ticket, alpha):
+    """How many players share this exact combination, relative to an average ticket (1.0). Mirrors formula.js."""
+    e = [1.0] + [0.0] * 6  # elementary symmetric polynomials of exp(alpha)
+    for a in alpha:
+        w = exp(a)
+        for j in range(6, 0, -1):
+            e[j] += e[j - 1] * w
+    return comb(len(alpha), 6) * exp(sum(alpha[x - 1] for x in ticket)) / e[6]
+
+
+def passes_filters(t):
+    """Same pattern filters as formula.js: no 3 consecutive, <=3 per last digit or tens, no 4-term progression."""
+    s = sorted(t)
+    if any(s[i] - s[i - 2] == 2 for i in range(2, 6)):
+        return False
+    for key in (lambda x: x % 10, lambda x: x // 10):
+        vals = [key(x) for x in s]
+        if max(vals.count(v) for v in vals) > 3:
+            return False
+    has = set(s)
+    return not any(s[j] + d in has and s[j] + 2 * d in has for i in range(6) for j in range(i + 1, 6) for d in [s[j] - s[i]])

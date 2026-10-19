@@ -23,6 +23,7 @@ def state(con):
             "next": m["next"] if m else None,
             "alpha": m["alpha"] if m else None,
             "model_updated": m["updated"] if m else None,
+            "markdo": m.get("markdo") if m else None,
         }
     return {"synced_at": db.get_meta(con, "synced_at"), "games": games, "ledger": ledger.totals(con), "plan": plan.status(con)}
 

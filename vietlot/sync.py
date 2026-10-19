@@ -9,7 +9,7 @@ from math import comb
 
 import numpy as np
 
-from . import alerts, db, popularity
+from . import alerts, db, lab, markdo, plan, popularity, rules
 
 RAW = "https://raw.githubusercontent.com/vietvudanh/vietlott-data/main/data/{}.jsonl"
 SOURCE = {"655": "power655", "645": "power645"}
@@ -135,10 +135,26 @@ def fit_model(con, game):
         jp1 = (12e9 if p["n_jp1"] else p["jp1"]) + growth * steps
         jp2 = None
         data = {"alpha": [round(float(x), 4) for x in a - a.mean()], "alpha_source": "655"}
+    data["markdo"] = markdo_block(draws, game, data["alpha"])
     data.update(sales_est=round(sales), jp_growth_est=round(growth),
                 next={"id": nid, "date": ndate, "jp1": round(jp1), "jp2": round(jp2) if jp2 is not None else None, "sales": round(sales)})
     now = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     con.execute("INSERT OR REPLACE INTO model VALUES (?,?,?)", (game, now, json.dumps(data)))
+
+
+def markdo_block(draws, game, alpha):
+    """Mark Do's picks and scores next to yours, for the board. Every combination still has the same odds."""
+    n = db.GAMES[game]["n"]
+    m = markdo.Model([d["main"] for d in draws], n)
+    rho = lambda ts: round(sum(rules.popularity(t, alpha) for t in ts) / len(ts), 2)
+    combo, merged = m.combo(), markdo.merged(m, alpha)
+    out = {"hot": m.hot, "overdue": m.overdue, "combo": combo, "combo_score": m.score(combo), "combo_rho": rho([combo]),
+           "merged": merged, "merged_scores": [m.score(t) for t in merged], "merged_rho": rho(merged),
+           "backtest": lab.backtest(lab.markdo_combo, np.array([d["main"] for d in draws]), n, {}, 30)}
+    p = plan.load()
+    if p["game"] == game:
+        out.update(plan_scores=[m.score(t) for t in p["tickets"]], plan_rho=rho(p["tickets"]))
+    return out
 
 
 def run(con=None, notify=True):

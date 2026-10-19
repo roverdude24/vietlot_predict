@@ -53,6 +53,18 @@ def unpopular(hist, n, ctx):
     return _top(ctx["alpha"], reverse=False)
 
 
+def markdo_combo(hist, n, ctx):
+    """Mark Do's 'today' pick: 3 hottest by Beta(6,49) posterior (= by count) + 3 most overdue."""
+    c = _counts(hist, n)
+    hot6 = _top(c)
+    last = np.full(n, -1)
+    for t, row in enumerate(hist):
+        last[row - 1] = t
+    gap = len(hist) - last
+    overdue = [b for b in sorted(range(1, n + 1), key=lambda b: (-gap[b - 1], b)) if b not in hot6]
+    return hot6[:3] + overdue[:3]
+
+
 STRATEGIES = [
     ("random", "Ngẫu nhiên", "6 số bốc thăm mỗi kỳ (đối chứng)", random_pick),
     ("hot", "Số nóng", "6 số ra nhiều nhất trong {window} kỳ gần nhất", hot),
@@ -60,8 +72,21 @@ STRATEGIES = [
     ("alltime", "Nóng từ đầu", "6 số ra nhiều nhất từ kỳ đầu tiên", all_time_hot),
     ("overdue", "Số gan", "6 số lâu chưa ra nhất", overdue),
     ("repeat", "Lặp kỳ trước", "đúng 6 số của kỳ vừa quay", repeat_last),
+    ("markdo", "Mark Do", "3 số nóng nhất + 3 số gan nhất (công thức gốc của trang markdo27)", markdo_combo),
     ("unpopular", "Ít người chọn", "6 số ít người chơi nhất (công thức chia giải)", unpopular),
 ]
+
+
+def backtest(f, mains, n, ctx, start):
+    """Walk-forward: matches of f's pick on every draw from `start`, against the hypergeometric null."""
+    mu = 36 / n
+    var = 6 * (6 / n) * ((n - 6) / n) * ((n - 6) / (n - 1))  # hypergeometric matches per draw
+    matches = np.array([len(set(f(mains[:t], n, ctx)) & set(mains[t])) for t in range(start, len(mains))])
+    mean = float(matches.mean())
+    z = (mean - mu) / np.sqrt(var / len(matches))
+    p = float(2 * stats.norm.sf(abs(z)))
+    return {"mean_matches": round(mean, 4), "expected": round(mu, 4), "hit_rate": round(float((matches >= 3).mean()), 4),
+            "z": round(float(z), 2), "p": round(p, 3), "draws": len(matches)}
 
 
 def run(con, game, window=30):
@@ -71,17 +96,13 @@ def run(con, game, window=30):
     ctx = {"window": window, "rng": np.random.default_rng(int(game)), "alpha": m["alpha"] if m else [0.0] * n}
     start = max(window, 1)
     mu = 36 / n
-    var = 6 * (6 / n) * ((n - 6) / n) * ((n - 6) / (n - 1))  # hypergeometric matches per draw
     T = len(mains) - start
     out = []
     for key, name, desc, f in STRATEGIES:
-        matches = np.array([len(set(f(mains[:t], n, ctx)) & set(mains[t])) for t in range(start, len(mains))])
-        mean = float(matches.mean())
-        z = (mean - mu) / np.sqrt(var / T)
-        p = float(2 * stats.norm.sf(abs(z)))
-        out.append({"key": key, "name": name, "desc": desc.format(window=window), "mean_matches": round(mean, 4),
-                    "hit_rate": round(float((matches >= 3).mean()), 4), "z": round(float(z), 2), "p": round(p, 3),
-                    "verdict": "như ngẫu nhiên" if p >= 0.05 else "khác ngẫu nhiên (p<0.05; cứ 20 cách thử thì 1 cách đạt mức này do may rủi)"})
+        r = backtest(f, mains, n, ctx, start)
+        out.append({"key": key, "name": name, "desc": desc.format(window=window), "mean_matches": r["mean_matches"],
+                    "hit_rate": r["hit_rate"], "z": r["z"], "p": r["p"],
+                    "verdict": "như ngẫu nhiên" if r["p"] >= 0.05 else "khác ngẫu nhiên (p<0.05; cứ 20 cách thử thì 1 cách đạt mức này do may rủi)"})
     counts = _counts(mains, n)
     expected = 6 * len(mains) / n
     chi2 = float(((counts - expected) ** 2 / expected).sum())
