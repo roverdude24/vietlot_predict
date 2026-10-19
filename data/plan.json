@@ -1,0 +1,14 @@
+{
+ "name": "Công thức của tôi",
+ "game": "655",
+ "rule": "every_draw",
+ "since": "2026-10-13",
+ "note": "5 vé rời (30 số khác nhau, không vé nào chung số) từ các số ít người chọn. Mua đều mọi kỳ, đúng 50.000đ, không đổi số.",
+ "tickets": [
+  [31, 34, 45, 52, 53, 55],
+  [16, 29, 33, 42, 47, 48],
+  [1, 14, 22, 30, 40, 49],
+  [21, 26, 37, 44, 46, 51],
+  [32, 35, 36, 41, 50, 54]
+ ]
+}

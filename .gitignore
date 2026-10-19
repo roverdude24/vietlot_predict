@@ -23,3 +23,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local platform data (rebuild with: python3 -m vietlot sync)
+data/vietlot.db*
+data/logs/
+.taste-skill/
+node_modules/
