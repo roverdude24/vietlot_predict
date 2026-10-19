@@ -217,6 +217,12 @@ code.sms { display: block; padding: 14px; background: var(--bg); border-radius: 
 .j655 { background: var(--c1); color: #fff; }
 .j645 { background: var(--c2); color: #fff; }
 .j655 .cap, .j645 .cap { color: inherit; }
+/* game switch: each game keeps its colour */
+.seg.big button { min-height: 64px; font-size: var(--step-lead); }
+.pick .seg.big button[aria-pressed="true"][data-v="655"] { background: var(--c1); color: #fff; }
+.pick .seg.big button[aria-pressed="true"][data-v="645"] { background: var(--c2); color: #fff; }
+.pick { padding: 8px; }
+.sun.g645 { background: #9cc8ff; }
 @media (max-width: 1000px) { .cmps { grid-template-columns: 1fr; } }
 @media (max-width: 1000px) {
   .board { grid-template-columns: repeat(6, minmax(0, 1fr)); }

@@ -104,10 +104,11 @@ function analysisHtml(g, tickets, alpha, inp) {
 const idk = (id) => "#" + String(id).padStart(5, "0");
 const chip = (bought, id) => `<span class="chip ${bought ? "ok" : "due"}">${bought ? "Đã mua" : "Chưa mua"} kỳ ${idk(id)}</span>`;
 
-// The user's own formula leads the board, answering "which numbers?" in one screen.
+// The board shows one game at a time (switch at the top, remembered); your formula's set leads it.
+const B = { game: localStorage.getItem("vl-game") === "645" ? "645" : "655" };
 const balls = (T, sm = "") => `<div class="prows${sm}">${T.map((t, i) => `<div class="marks r${i % 5}">${t.map((x) => mk(x, "ball")).join("")}</div>`).join("")}</div>`;
-function planTile(st) {
-  const pl = st.plan, g = pl.game, game = GAMES[g], d = st.games[g], nx = d.next, T = pl.tickets;
+function planTile(st, g) {
+  const game = GAMES[g], d = st.games[g], pl = d.pick, nx = d.next, T = pl.tickets;
   const o = oddsFigures(g, T);
   const rho = mean(T.map((t) => popularity(t, d.alpha)));
   const ev = haveNext(nx) ? expectedValue(game, { ...evInputs(nx), rho }) : null;
@@ -117,11 +118,11 @@ function planTile(st) {
     : `<code class="sms">${esc(pl.sms.join("\n"))}</code>
        <button type="button" class="btn red" data-act="copy" data-copy="${esc(pl.sms.join("\n"))}" data-k="copy">Sao chép tin nhắn, gửi 9969</button>
        <label class="field" for="plan-code">Mã vé (không bắt buộc)</label><input id="plan-code" data-in="plancode" autocomplete="off" value="${esc(P.planCode)}">
-       <button type="button" class="btn" data-act="planBuy" data-k="planBuy">Đã gửi SMS, ghi vào sổ</button>
+       <button type="button" class="btn" data-act="planBuy" data-g="${g}" data-k="planBuy">Đã gửi SMS, ghi vào sổ</button>
        <p class="cap" role="status" id="plan-msg"></p>`;
-  return tile("s12 sun", `<div class="plan">
+  return tile(`s12 sun g${g}`, `<div class="plan">
     <div class="pl-a">
-      <h1>Số cho kỳ ${idk(pl.next_draw)}</h1>
+      <h1>${game.name}: số cho kỳ ${idk(pl.next_draw)}</h1>
       <p class="stat">${chip(pl.next_bought, pl.next_draw)}<span>${date}${nx && nx.jp1 ? `, Jackpot ${ty(nx.jp1)}` : ""}</span></p>
       ${balls(T)}
       <p class="lead">Không số nào dễ ra hơn số nào: mỗi bộ 6 số đều là 1 trên ${nf(game.total)}. Với ${dong(pl.cost_per_draw)}, 5 vé không chung số này là cách có cơ hội trúng cao nhất.</p>
@@ -137,11 +138,11 @@ function planTile(st) {
 }
 
 // Your formula next to Mark Do's original (markdo27) and the two merged.
-function markdoTile(st) {
-  const g = st.plan ? st.plan.game : "655", d = st.games[g], md = d.markdo, n = GAMES[g].n;
+function markdoTile(st, g) {
+  const d = st.games[g], md = d.markdo, n = GAMES[g].n;
   if (!md) return "";
   const sets = [
-    st.plan && { cls: "mine", name: "Công thức của tôi", how: "5 vé rời, số ít người chọn", T: st.plan.tickets, sc: md.plan_scores, rho: md.plan_rho },
+    d.pick && { cls: "mine", name: "Công thức của tôi", how: "5 vé rời, số ít người chọn", T: d.pick.tickets, sc: md.plan_scores, rho: md.plan_rho },
     { cls: "md", name: "Mark Do", how: `3 số nóng nhất (${md.hot.slice(0, 3).join(", ")}) + 3 số gan nhất (${md.overdue.slice(0, 3).join(", ")})`, T: [md.combo], sc: [md.combo_score], rho: md.combo_rho },
     { cls: "mix", name: "Gộp hai công thức", how: "5 vé rời, số chọn theo điểm Mark Do", T: md.merged, sc: md.merged_scores, rho: md.merged_rho },
   ].filter(Boolean);
@@ -159,30 +160,29 @@ function markdoTile(st) {
 
 async function viewBang(root) {
   const st = await getState();
-  const rows = GIDS.map((g) => ({ g, game: GAMES[g], d: st.games[g], nx: st.games[g].next }));
-  const pl = st.plan;
-  const first = pl ? planTile(st) : tile("s12 sun", `<h1>Chưa có công thức</h1><p>Thêm data/plan.json rồi tải lại.</p>`);
-  const jp = rows.map(({ g, game, nx }) => tile(`s3 j${g}`, nx
-    ? `<p class="fig">${nx.jp1 != null ? ty(nx.jp1) : "chưa rõ"}</p><p>Jackpot ${game.id === "655" ? "1 " : ""}${game.name}, kỳ #${nx.id}, ${wd(nx.date)} ${dm(nx.date)}</p>${nx.jp2 != null ? `<p>Jackpot 2: ${ty(nx.jp2)}</p>` : ""}`
-    : `<p class="fig">chưa rõ</p><p>${game.name}: chưa có kỳ tới</p>`)).join("");
-  const results = rows.map(({ g, game, d }) => {
-    const l = d.last;
-    if (!l) return tile("s6", `<h2>${game.name}</h2><p>Chưa có kỳ quay nào.</p>`);
+  const g = B.game, game = GAMES[g], d = st.games[g], nx = d.next, l = d.last;
+  const seg = `<div class="seg big" role="group" aria-label="Trò chơi">${GIDS.map((id) => `<button type="button" data-act="board" data-v="${id}" data-k="b${id}" aria-pressed="${id === g}">${GAMES[id].name}</button>`).join("")}</div>`;
+  const first = d.pick ? planTile(st, g) : tile("s12 sun", `<h1>${game.name}: chưa có bộ số</h1><p>Bấm “Cập nhật ngay” để tải dữ liệu.</p>`);
+  const jp = tile(`j${g}`, nx
+    ? `<p class="fig">${nx.jp1 != null ? ty(nx.jp1) : "chưa rõ"}</p><p>Jackpot ${g === "655" ? "1 " : ""}${game.name}, kỳ #${nx.id}, ${wd(nx.date)} ${dm(nx.date)}</p>${nx.jp2 != null ? `<p>Jackpot 2: ${ty(nx.jp2)}</p>` : ""}`
+    : `<p class="fig">chưa rõ</p><p>${game.name}: chưa có kỳ tới</p>`);
+  let result = tile("s12", `<h2>${game.name}</h2><p>Chưa có kỳ quay nào.</p>`);
+  if (l) {
     const p = l.prizes;
-    const val = (key) => (key === "jp1" ? p.jp1 : key === "jp2" ? p.jp2 : net(GAMES[g].prizes.find((x) => x.key === key).value));
+    const val = (key) => (key === "jp1" ? p.jp1 : key === "jp2" ? p.jp2 : net(game.prizes.find((x) => x.key === key).value));
     const cnt = (key) => ({ jp1: p.n_jp1, jp2: p.n_jp2, p1: p.n1, p2: p.n2, p3: p.n3 })[key];
     const win = p
       ? `<table class="t"><thead><tr><th>Giải</th><th>Giá trị</th><th>Số vé trúng</th></tr></thead><tbody>${game.prizes.filter((x) => cnt(x.key) != null).map((x) => `<tr><td>${x.name}</td><td>${val(x.key) != null ? dong(val(x.key)) : "–"}</td><td>${nf(cnt(x.key))}</td></tr>`).join("")}</tbody></table>`
       : `<p class="cap">Chưa có số vé trúng cho kỳ này.</p>`;
-    return tile("s6", `<h2>Kết quả ${game.name}: kỳ #${l.id}, ${wd(l.date)} ${dmy(l.date)}</h2>
+    result = tile("s8", `<h2>Kết quả ${game.name}: kỳ #${l.id}, ${wd(l.date)} ${dmy(l.date)}</h2>
       <div class="drawn"><div class="marks">${l.main.map((x) => mk(x, "ball hit")).join("")}</div>${l.bonus != null ? `<div class="bonus">${mk(l.bonus, "ball")}<span class="cap">số đặc biệt</span></div>` : ""}</div>${win}`);
-  }).join("");
+  }
   const L = st.ledger, netv = L.won - L.spent;
   root.innerHTML = [
-    first, markdoTile(st), jp,
-    tile("s3", `<h2>Sổ vé</h2><dl class="kv"><dt>Đã chi</dt><dd>${dong(L.spent)}</dd><dt>Đã trúng</dt><dd>${dong(L.won)}</dd><dt>Chênh lệch</dt><dd>${signed(netv)}</dd></dl><p class="cap">${L.tickets} vé trong ${L.purchases} lần mua. <a href="#/so-ve">Mở sổ vé</a></p>`),
-    tile("s3", `<h2>Dữ liệu</h2><p>Cập nhật lần cuối ${st.synced_at ? when(st.synced_at) : "chưa lần nào"}.</p><button class="btn" data-act="sync" data-k="sync">Cập nhật ngay</button><div class="log" aria-live="polite">${syncLogHtml()}</div>`),
-    results,
+    tile("s12 pick", seg),
+    first, markdoTile(st, g), result,
+    `<div class="col s4">${jp}${tile("", `<h2>Sổ vé</h2><dl class="kv"><dt>Đã chi</dt><dd>${dong(L.spent)}</dd><dt>Đã trúng</dt><dd>${dong(L.won)}</dd><dt>Chênh lệch</dt><dd>${signed(netv)}</dd></dl><p class="cap">${L.tickets} vé trong ${L.purchases} lần mua. <a href="#/so-ve">Mở sổ vé</a></p>`)}
+      ${tile("", `<h2>Dữ liệu</h2><p>Cập nhật lần cuối ${st.synced_at ? when(st.synced_at) : "chưa lần nào"}.</p><button class="btn" data-act="sync" data-k="sync">Cập nhật ngay</button><div class="log" aria-live="polite">${syncLogHtml()}</div>`)}</div>`,
     `<figure class="tile photo" style="--i:${ix++}"><img src="assets/ve-so-buoi-som.jpg" width="1024" height="682" alt="Người bán vé số ven đường ngồi bên bàn nhỏ, ảnh đen trắng"></figure>`,
   ].join("");
 }
@@ -457,8 +457,13 @@ const ACT = {
     } catch (e) { P.saveErr = e.message; P.saved = ""; }
     rerender();
   },
+  board(b) {
+    B.game = b.dataset.v;
+    localStorage.setItem("vl-game", B.game);
+    route(true);
+  },
   async planBuy(b) {
-    const pl = C.state.plan, msg = document.getElementById("plan-msg");
+    const pl = C.state.games[b.dataset.g].pick, msg = document.getElementById("plan-msg");
     b.disabled = true; b.setAttribute("aria-busy", "true");
     try {
       const body = { game: pl.game, draw_id: pl.next_draw, tickets: pl.tickets };

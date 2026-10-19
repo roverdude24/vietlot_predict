@@ -26,3 +26,18 @@ def status(con):
                                        (p["game"], nxt["id"])).fetchone() is not None
     return dict(p, cost_per_draw=rules.PRICE * len(p["tickets"]), sms=sms(p["game"], p["tickets"]),
                 next_draw=nxt["id"] if nxt else None, next_bought=bought)
+
+
+def pick(con, game):
+    """The set the board shows for a game: the saved plan for its game, else the same formula's set."""
+    p = load()
+    if p["game"] == game:
+        return status(con)
+    m = db.model(con, game)
+    if not m or not m.get("formula_set"):
+        return None
+    t = m["formula_set"]
+    bought = con.execute("SELECT 1 FROM purchases WHERE game = ? AND draw_id = ?", (game, m["next"]["id"])).fetchone() is not None
+    return {"name": "Công thức của tôi", "game": game, "tickets": t, "cost_per_draw": rules.PRICE * len(t),
+            "note": "Cùng công thức: 5 vé rời (30 số khác nhau) từ các số ít người chọn.",
+            "sms": sms(game, t), "next_draw": m["next"]["id"], "next_bought": bought}

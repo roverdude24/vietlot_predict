@@ -70,3 +70,20 @@ def passes_filters(t):
             return False
     has = set(s)
     return not any(s[j] + d in has and s[j] + 2 * d in has for i in range(6) for j in range(i + 1, 6) for d in [s[j] - s[i]])
+
+
+def formula_set(alpha, k=5, tries=4000, seed=0):
+    """The user's formula applied to any game: k disjoint tickets from the 6k least popular numbers,
+    passing the pattern filters, split so the tickets are as unpopular as possible."""
+    import random
+    rng = random.Random(seed)
+    pool = sorted(range(1, len(alpha) + 1), key=lambda b: alpha[b - 1])[:6 * k]
+    best, best_s = None, None
+    for _ in range(tries):
+        rng.shuffle(pool)
+        ts = [sorted(pool[6 * i:6 * i + 6]) for i in range(k)]
+        if all(passes_filters(t) for t in ts):
+            s = sum(exp(sum(alpha[x - 1] for x in t)) for t in ts)
+            if best_s is None or s < best_s:
+                best, best_s = ts, s
+    return best
