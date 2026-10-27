@@ -8,10 +8,7 @@
 His "today" pick: 3 hottest by posterior + 3 most overdue.
 His own note: a high score does not mean a higher chance; every ticket is 1 / C(n, 6).
 """
-import random
 from math import erf, sqrt
-
-from . import rules as fx
 
 A0, B0 = 6, 49
 
@@ -52,22 +49,3 @@ class Model:
 
     def combo(self):
         return sorted(self.hot[:3] + self.overdue[:3])
-
-
-def merged(model, alpha, k=5, tries=4000, seed=0):
-    """Your formula + Mark Do: k disjoint tickets that pass the pattern filters (so the odds stay at the
-    disjoint maximum), choosing the 6k numbers and their split by Mark Do score, ties broken by fewer co-players."""
-    rng = random.Random(seed)
-    n = model.n
-    ball = {b: 0.4 * model.rank_pct[b] + 0.3 * model.gap_pct[b] for b in range(1, n + 1)}
-    pool = sorted(range(1, n + 1), key=lambda b: (-ball[b], alpha[b - 1]))[:min(n, 6 * k + 6)]
-    best, best_key = None, None
-    for _ in range(tries):
-        rng.shuffle(pool)
-        tickets = [sorted(pool[6 * i:6 * i + 6]) for i in range(k)]
-        if not all(fx.passes_filters(t) for t in tickets):
-            continue
-        key = (sum(model.score(t) for t in tickets), -sum(fx.popularity(t, alpha) for t in tickets))
-        if best_key is None or key > best_key:
-            best, best_key = tickets, key
-    return best

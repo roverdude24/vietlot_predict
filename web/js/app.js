@@ -87,7 +87,7 @@ function replayHtml(g, tickets) {
   const won = game.prizes.filter((p) => r.tally[p.key]).map((p) => `${r.tally[p.key]} lần ${p.name}`);
   const best = r.best ? `Nhiều số nhất: ${r.best.m} số, kỳ #${r.best.id} (${dmy(r.best.date)}).` : "Chưa lần nào trúng giải.";
   return `<h3>Nếu đã mua bộ này từ ${asc[0].date.slice(0, 4)}</h3>
-    <p>${nf(asc.length)} kỳ × ${tickets.length} vé = chi ${dong(r.spent)}. Giải cố định nhận về ${dong(r.money)} sau thuế${jp ? `, chưa tính ${jp} lần Jackpot` : ""}. Chênh lệch ${signed(r.money - r.spent)}.</p>
+    <p>${nf(asc.length)} kỳ × ${tickets.length} vé = chi ${dong(r.spent)}. Giải cố định nhận về ${dong(r.money)} sau thuế (tính theo mức thuế hiện hành)${jp ? `, chưa tính ${jp} lần Jackpot` : ""}. Chênh lệch ${signed(r.money - r.spent)}.</p>
     <p>${won.length ? esc(won.join(", ")) + ". " : ""}${best}</p>`;
 }
 function analysisHtml(g, tickets, alpha, inp) {
@@ -137,14 +137,13 @@ function planTile(st, g) {
     </div></div>`);
 }
 
-// Your formula next to Mark Do's original (markdo27) and the two merged.
+// Your formula next to Mark Do's original (markdo27).
 function markdoTile(st, g) {
   const d = st.games[g], md = d.markdo, n = GAMES[g].n;
   if (!md) return "";
   const sets = [
     d.pick && { cls: "mine", name: "Công thức của tôi", how: "5 vé rời, số ít người chọn", T: d.pick.tickets, sc: md.plan_scores, rho: md.plan_rho },
     { cls: "md", name: "Mark Do", how: `3 số nóng nhất (${md.hot.slice(0, 3).join(", ")}) + 3 số gan nhất (${md.overdue.slice(0, 3).join(", ")})`, T: [md.combo], sc: [md.combo_score], rho: md.combo_rho },
-    { cls: "mix", name: "Gộp hai công thức", how: "5 vé rời, số chọn theo điểm Mark Do", T: md.merged, sc: md.merged_scores, rho: md.merged_rho },
   ].filter(Boolean);
   const col = (s) => {
     const c = coverage(s.T, n);
@@ -153,9 +152,9 @@ function markdoTile(st, g) {
       <dt>Điểm Mark Do</dt><dd>${Math.round(mean(s.sc))}/100</dd><dt>Người chia Jackpot</dt><dd>×${nf(s.rho, 2)}</dd></dl></div>`;
   };
   const bt = md.backtest;
-  return tile("s12", `<h2>Gộp với công thức Mark Do</h2>
+  return tile("s12", `<h2>So với công thức Mark Do</h2>
     <div class="cmps">${sets.map(col).join("")}</div>
-    <p>Điểm Mark Do không làm số dễ ra hơn: thử lại trên ${nf(bt.draws)} kỳ, cách chọn của Mark Do trùng trung bình ${nf(bt.mean_matches, 3)} số mỗi kỳ, chọn bừa là ${nf(bt.expected, 3)} (p = ${nf(bt.p, 2)}, như ngẫu nhiên). Bộ gộp có cùng cơ hội với bộ của bạn vì cũng là 5 vé rời; khác ở chỗ nhiều người chọn số nóng hơn, nên nếu trúng Jackpot phải chia cho nhiều người hơn. <b>Giữ bộ của bạn.</b> <a href="#/phong-thu">Xem phòng thử</a></p>`);
+    <p>Điểm Mark Do không làm số dễ ra hơn: thử lại trên ${nf(bt.draws)} kỳ, cách chọn của Mark Do trùng trung bình ${nf(bt.mean_matches, 3)} số mỗi kỳ, chọn bừa là ${nf(bt.expected, 3)} (p = ${nf(bt.p, 2)}, như ngẫu nhiên). Mark Do chọn số nóng, là số nhiều người cũng chọn, nên nếu trúng Jackpot phải chia cho nhiều người hơn. <b>Giữ bộ của bạn.</b> <a href="#/phong-thu">Xem phòng thử</a></p>`);
 }
 
 async function viewBang(root) {
@@ -202,7 +201,7 @@ function ensureInputs() {
   const nx = C.state.games[P.game].next;
   if (P.inpGame !== P.game) {
     P.inpGame = P.game;
-    P.inp = nx ? { jp1: nx.jp1 ?? 0, jp2: nx.jp2 ?? 0, sales: nx.sales ?? 0 } : { jp1: 0, jp2: 0, sales: 0 };
+    P.inp = nx ? { jp1: nx.jp1 ?? 0, jp2: nx.jp2 ?? 0, sales: nx.sales ?? 0, elast: nx.elast ?? 0 } : { jp1: 0, jp2: 0, sales: 0, elast: 0 };
   }
 }
 function build() {
@@ -254,7 +253,7 @@ function renderPicker() {
       <div class="marks">${t.map((x) => mk(x)).join("")}</div>
       <p class="cap">Kỳ vọng <b data-ev="${i}">${dong(e.ev[i])}</b> trên ${dong(PRICE)}</p></article>`).join("");
   const sms = smsLines(game, T);
-  const be = breakEvenJackpot(game, { jp2: inp.jp2, sales: inp.sales, rho: mean(e.rho) });
+  const be = breakEvenJackpot(game, { ...inp, rho: mean(e.rho) });
   const bought = isPlan && pl.next_bought;
   const ownBlock = `<h2>Vé của riêng bạn</h2><label class="field" for="own">Mỗi dòng một vé, 6 số cách nhau bằng dấu cách (${game.name}, số từ 1 đến ${game.n})</label>
       <textarea id="own" data-in="own" rows="6" spellcheck="false" placeholder="03 17 26 38 44 52">${esc(P.own)}</textarea>`;
@@ -297,7 +296,7 @@ function updateEv() {
   const set = (sel, v) => { const el = root.querySelector(sel); if (el) el.textContent = v; };
   set("[data-evtot]", dong(e.total));
   set("[data-evpct]", pct(e.total / cost, 0));
-  const be = breakEvenJackpot(game, { jp2: inp.jp2, sales: inp.sales, rho: mean(e.rho) });
+  const be = breakEvenJackpot(game, { ...inp, rho: mean(e.rho) });
   set("[data-be]", be ? ty(be) : "không bao giờ");
   updateOwn();
 }

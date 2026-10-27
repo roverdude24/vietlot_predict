@@ -51,13 +51,15 @@ export function expectedValue(game, { jp1, jp2 = 0, sales, rho = 1 }) {
   return sum / N;
 }
 
-/** Jackpot 1 at which one ticket returns its price on average, other inputs fixed; null if never. */
-export function breakEvenJackpot(game, opts) {
+/** Jackpot 1 at which one ticket returns its price on average; null if never.
+ *  Sales follow the jackpot: sales(x) = sales · (x / jp1)^elast, anchored at the given jp1 and sales. */
+export function breakEvenJackpot(game, { jp1: ref = 0, sales, elast = 0, ...opts }) {
+  const ev = (x) => expectedValue(game, { ...opts, jp1: x, sales: ref > 0 ? sales * (x / ref) ** elast : sales });
   let lo = 0, hi = 5e13;
-  if (expectedValue(game, { ...opts, jp1: hi }) < PRICE) return null;
+  if (ev(hi) < PRICE) return null;
   for (let i = 0; i < 100; i++) {
     const mid = (lo + hi) / 2;
-    if (expectedValue(game, { ...opts, jp1: mid }) < PRICE) lo = mid; else hi = mid;
+    if (ev(mid) < PRICE) lo = mid; else hi = mid;
   }
   return hi;
 }
@@ -199,7 +201,8 @@ export function frequencyTest(draws, n) {
   const counts = new Array(n).fill(0);
   for (const d of draws) for (const x of d.main) counts[x - 1]++;
   const expected = (6 * draws.length) / n;
-  const chi2 = counts.reduce((s, o) => s + (o - expected) ** 2 / expected, 0);
+  // 6 distinct numbers per draw: per-number variance is (n-6)/(n-1) of the multinomial one
+  const chi2 = (counts.reduce((s, o) => s + (o - expected) ** 2 / expected, 0) * (n - 1)) / (n - 6);
   const df = n - 1;
   return { counts, expected, chi2, df, p: 1 - gammaP(df / 2, chi2 / 2) };
 }

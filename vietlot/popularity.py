@@ -5,7 +5,9 @@ above its expectation when the drawn numbers are ones many players picked. Two r
   y1 = log n3  on number indicators + Tue/Thu + quarter effects + log JP1 + log(sales proxy of previous draw)
   y2 = log(n2 / n3) on number indicators + quarter effects   (sales cancel out)
 Coefficients convert to per-number popularity alpha (ticket weight ~ exp(sum alpha)) and are combined
-by inverse variance. Result: alpha (centred, sum 0) and its standard error per number.
+by inverse variance, then shrunk toward 0 (empirical Bayes: each number keeps tau2 / (tau2 + se^2) of its
+estimate, tau2 = true spread of popularity) so noise is not mistaken for habit. Result: alpha (centred, sum 0)
+and its standard error per number.
 """
 import datetime
 import warnings
@@ -69,4 +71,7 @@ def fit(draws, n=55):
     a1, s1 = _alpha(*_ols(np.array(y1), np.array(X1, float)), K_N3, n)
     a2, s2 = _alpha(*_ols(np.array(y2), np.array(X2, float)), K_N2, n)
     w1, w2 = 1 / s1 ** 2, 1 / s2 ** 2
-    return (w1 * a1 + w2 * a2) / (w1 + w2), 1 / np.sqrt(w1 + w2), len(y1)
+    a, s = (w1 * a1 + w2 * a2) / (w1 + w2), 1 / np.sqrt(w1 + w2)
+    tau2 = max(0.0, a.var() - np.mean(s ** 2))
+    a = a * tau2 / (tau2 + s ** 2)
+    return a - a.mean(), s, len(y1)

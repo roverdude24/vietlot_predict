@@ -108,6 +108,15 @@ def next_draw(game, last_id, last_date):
     return last_id + 1, d.isoformat()
 
 
+def sales_at(known, recent, jp1, per_ticket):
+    """Tickets sold at a given Jackpot 1. Sales ~ jp1^e (e fitted on log n3 ~ log jp1 over all draws),
+    so each recent draw's sales (Ba winners / per-ticket odds) is rescaled to jp1 before averaging."""
+    rows = [d for d in known if d["prizes"]["n3"]]
+    e = float(np.polyfit(np.log([d["prizes"]["jp1"] for d in rows]), np.log([d["prizes"]["n3"] for d in rows]), 1)[0])
+    s = [d["prizes"]["n3"] / per_ticket * (jp1 / d["prizes"]["jp1"]) ** e for d in recent if d["prizes"]["n3"]]
+    return float(np.mean(s)), e
+
+
 def fit_model(con, game):
     draws = db.draws(con, game)
     known = [d for d in draws if d["prizes"] and d["prizes"]["jp1"]]
@@ -117,28 +126,28 @@ def fit_model(con, game):
     p = lastp["prizes"]
     if game == "655":
         alpha, se, n_fit = popularity.fit(draws, 55)
-        recent = known[-10:]
-        sales = float(np.mean([d["prizes"]["n3"] for d in recent])) / (368480 / comb(55, 6))
         acc = [(b["prizes"]["jp1"] - a["prizes"]["jp1"]) / 0.9 / (b["id"] - a["id"])
                for a, b in zip(known[-13:-1], known[-12:]) if not a["prizes"]["n_jp1"] and b["prizes"]["jp1"] > a["prizes"]["jp1"]]
         growth = float(np.median(acc)) if acc else 0.0
         jp1 = (30e9 if p["n_jp1"] else p["jp1"]) + 0.9 * growth * steps  # reset values, then each draw adds A
         jp2 = (3e9 if p["n_jp2"] else p["jp2"]) + 0.1 * growth * steps
+        sales, elast = sales_at(known, known[-10:], jp1, 368480 / comb(55, 6))
         data = {"alpha": [round(float(x), 4) for x in alpha], "alpha_se": [round(float(x), 4) for x in se], "fit_draws": n_fit}
     else:
         base = db.model(con, "655")  # no 6/45 winner history to fit: reuse 6/55 habits for 1-45, re-centred
         a = np.array(base["alpha"][:45]) if base else np.zeros(45)
         since = [d for i, d in enumerate(known) if not any(x["prizes"]["n_jp1"] for x in known[i:-1])][-10:]
-        sales = float(np.mean([d["prizes"]["n3"] for d in since])) / (182780 / comb(45, 6))
         st = [(b["prizes"]["jp1"] - a_["prizes"]["jp1"]) / (b["id"] - a_["id"]) for a_, b in zip(since, since[1:])]
         growth = float(np.median(st)) if st else 0.0
         jp1 = (12e9 if p["n_jp1"] else p["jp1"]) + growth * steps
         jp2 = None
+        sales, elast = sales_at(known, since, jp1, 182780 / comb(45, 6))
         data = {"alpha": [round(float(x), 4) for x in a - a.mean()], "alpha_source": "655"}
     data["formula_set"] = rules.formula_set(data["alpha"])
     data["markdo"] = markdo_block(draws, game, data["alpha"], data["formula_set"])
-    data.update(sales_est=round(sales), jp_growth_est=round(growth),
-                next={"id": nid, "date": ndate, "jp1": round(jp1), "jp2": round(jp2) if jp2 is not None else None, "sales": round(sales)})
+    data.update(sales_est=round(sales), sales_elast=round(elast, 3), jp_growth_est=round(growth),
+                next={"id": nid, "date": ndate, "jp1": round(jp1), "jp2": round(jp2) if jp2 is not None else None,
+                      "sales": round(sales), "elast": round(elast, 3)})
     now = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
     con.execute("INSERT OR REPLACE INTO model VALUES (?,?,?)", (game, now, json.dumps(data)))
 
@@ -148,9 +157,8 @@ def markdo_block(draws, game, alpha, own):
     n = db.GAMES[game]["n"]
     m = markdo.Model([d["main"] for d in draws], n)
     rho = lambda ts: round(sum(rules.popularity(t, alpha) for t in ts) / len(ts), 2)
-    combo, merged = m.combo(), markdo.merged(m, alpha)
+    combo = m.combo()
     out = {"hot": m.hot, "overdue": m.overdue, "combo": combo, "combo_score": m.score(combo), "combo_rho": rho([combo]),
-           "merged": merged, "merged_scores": [m.score(t) for t in merged], "merged_rho": rho(merged),
            "backtest": lab.backtest(lab.markdo_combo, np.array([d["main"] for d in draws]), n, {}, 30)}
     p = plan.load()
     mine = p["tickets"] if p["game"] == game else own

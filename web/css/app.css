@@ -209,11 +209,10 @@ code.sms { display: block; padding: 14px; background: var(--bg); border-radius: 
 .prows.sm { display: grid; gap: 4px; }
 .prows.sm .marks { grid-template-columns: repeat(6, minmax(0, 40px)); gap: 4px; }
 .prows.sm .mk { font-size: var(--step-small); }
-.cmps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); }
+.cmps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
 .cmp { border-radius: var(--r); padding: 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .cmp.mine { background: #c9ecd7; }
 .cmp.md { background: #d3e2fb; }
-.cmp.mix { background: #fddcc4; }
 .j655 { background: var(--c1); color: #fff; }
 .j645 { background: var(--c2); color: #fff; }
 .j655 .cap, .j645 .cap { color: inherit; }

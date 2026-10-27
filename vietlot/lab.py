@@ -105,7 +105,8 @@ def run(con, game, window=30):
                     "verdict": "như ngẫu nhiên" if r["p"] >= 0.05 else "khác ngẫu nhiên (p<0.05; cứ 20 cách thử thì 1 cách đạt mức này do may rủi)"})
     counts = _counts(mains, n)
     expected = 6 * len(mains) / n
-    chi2 = float(((counts - expected) ** 2 / expected).sum())
+    # 6 distinct numbers per draw: per-number variance is (n-6)/(n-1) of the multinomial one
+    chi2 = float(((counts - expected) ** 2 / expected).sum()) * (n - 1) / (n - 6)
     return {"draws_scored": int(T), "expected_matches": round(mu, 4),
             "expected_hit_rate": round(sum(stats.hypergeom.pmf(k, n, 6, 6) for k in range(3, 7)), 4),
             "frequency": {"counts": counts.tolist(), "expected": round(expected, 2), "chi2": round(chi2, 2),

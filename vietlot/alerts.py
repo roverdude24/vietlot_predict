@@ -21,7 +21,8 @@ def message(con, game, draw):
     m = db.model(con, game)
     if m and m["next"]["jp1"]:
         nx = m["next"]
-        ev = rules.expected_value(game, nx["jp1"], nx["jp2"] or 0, nx["sales"], 0.71)  # 0.71: typical popularity of formula-built tickets
+        rho = sum(rules.popularity(t, m["alpha"]) for t in m["formula_set"]) / len(m["formula_set"])
+        ev = rules.expected_value(game, nx["jp1"], nx["jp2"] or 0, nx["sales"], rho)
         lines.append("Kỳ #%05d: Jackpot ~%s tỷ, vé chọn theo công thức nhận lại ~%sđ / 10.000đ"
                      % (nx["id"], _fmt(nx["jp1"] / 1e9), _fmt(round(ev, -1))))
     st = plan.status(con)

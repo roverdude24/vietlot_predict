@@ -6,7 +6,7 @@ Forked from [markdo27/vietlot_predict](https://github.com/markdo27/vietlot_predi
 
 ## What it can and cannot do
 
-Vietlott draws are uniform random. On 1,412 Power 6/55 draws, number frequencies give χ² = 50.3 with df = 54, p = 0.62. No method predicts numbers. The **prediction lab** shows this: every strategy (hot, cold, overdue, repeat, …) is scored walk-forward against chance, and all of them match chance.
+Vietlott draws are uniform random. On 1,415 Power 6/55 draws, number frequencies give χ² = 55.5 with df = 54, p = 0.42 (χ² corrected by (n−1)/(n−6) because each draw holds 6 distinct numbers). No method predicts numbers. The **prediction lab** shows this: every strategy (hot, cold, overdue, repeat, …) is scored walk-forward against chance, and all of them match chance.
 
 The picker uses the two levers that do work:
 
